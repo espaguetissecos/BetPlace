@@ -1,0 +1,215 @@
+<?php 
+require("class.php"); 
+session_start(); 
+?>
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+  <title>BetPlace, tu sitio de apuestas deportivas</title>
+  
+  <script type="text/javascript" src="http://code.jquery.com/jquery-1.9.1.js"></script>
+  <link rel="stylesheet" type="text/css" href="style.css">
+
+    <script type="text/javascript">//<![CDATA[ 
+    $(window).load(function(){
+      $("[data-toggle]").click(function() {
+        var toggle_el = $(this).data("toggle");
+        $(toggle_el).toggleClass("open-sidebar");
+      });
+    });//]]>  
+    
+    </script>
+</head>
+<body>
+		<div id = "header">
+			<div id= "logo">
+				<p2><a href="index.php"> BetPlace </a><div class="circle"></div> </p2>
+			</div>
+			<?php 
+			$cookie_name = "user";
+			if (isset($_COOKIE[$cookie_name]) && isset($_GET['logout'])){
+				setcookie($cookie_name, $_COOKIE[$cookie_name], time() - 3600, "/");
+				unset($_COOKIE[$cookie_name]);
+			}elseif(isset($_COOKIE[$cookie_name])){ ?>
+				<div id = "logged"><?php print_r($_COOKIE[$cookie_name]) ?>
+					<div id="photo"></div> 
+					<?php if (isset($_SESSION['carrito'])) { ?>
+							<div id="carro" onclick="location.href='carrito.php'"> </div>
+					<?php } ?>
+				</div>
+			<?php
+			}
+			?>
+		</div>
+
+	<div id = "nav_der">
+		<form id="searchform" method="post" action="busqueda.php">
+			<input id="buscar" name= "buscar" type="text" placeholder="Buscar...">
+			<button id = "boton_buscar" type="submit">Buscar</button>
+			<select id = "desplegable" name="categoria">			
+				  <option value="Futbol" selected>Fútbol</option>
+				  <option value="Baloncesto">Baloncesto</option>
+				  <option value="Balonmano">Balonmano</option>
+				  <option value="Otros">Otros</option>
+			</select>
+		</form>
+		<br>
+		<ul>
+		<?php
+		if(isset($_COOKIE[$cookie_name])){ ?>
+			<li><a href="historial.php">Historial</a>
+			<li><a href="anadirDinero.php">Añadir Saldo</a>
+			<li><a href="index.php?logout">Desconectarse</a>
+		<?php
+		}else{ ?>
+			<li><a href="login.php">Login</a>
+			<li><a href="registrar.php">Registrarse</a>
+			<li><a href="carrito.php">Carrito Invitado</a>				
+		<?php
+		}
+		?>
+		</ul>
+	</div>
+
+
+	<footer>Copyright © BetPlace</footer>
+
+    <div class="container">
+      <div id="nav_izda">
+          <ul name= "lista">
+	         <?php    	        
+	        	 
+          	$apuestas2 = pg_connect("host=localhost dbname=si1 user=alumnodb password=alumnodb");
+
+		$result = pg_query("SELECT * FROM bets");
+		while ($row = pg_fetch_row($result))
+			{
+				?> <li><a href=<?php echo "apuestadetalle.php?categ=" . $row[2] . "&id=". $row[0]  . "&desc=" . $row[3] ?> > <?php echo $row[3] ?>  </a></li><?php
+			}
+			?>
+
+	</ul>
+      </div>
+      <div class="main-content">
+          <a href="#" data-toggle=".container" id="nav_izda-boton">
+              <span class="bar"></span>
+              <span class="bar"></span>
+              <span class="bar"></span>
+          </a>
+          <div class="content">
+              <p> 
+		<div id="apostar">
+			<div id ="goles">
+			<form method="get">
+			
+				<?php
+		          	$id = $_GET['id'];
+					$betdesc = pg_fetch_row(pg_query("SELECT betdesc FROM bets WHERE betid=$id"))[0];
+        			$result2 = pg_query("select options.optiondesc, optionbet.ratio, options.optionid from optionbet inner join options on options.optionid=optionbet.optionid where optionbet.betid = $id");	
+        			$row1 = pg_fetch_row($result2);
+        			$row2 = pg_fetch_row($result2);
+        			$row3 = pg_fetch_row($result2);	
+
+					$local_n = round((float)$row1[1], 3);
+					$empate_n = round((float)$row2[1], 3);
+					$visitante_n = round((float)$row3[1], 3);
+
+
+				?>
+				
+				Rellene los campos para realizar su apuesta. <br><br>
+				Resultado del encuentro <?php echo $betdesc ?>:<br><br>
+
+				<input type="radio" name="win" value= "1" checked> <?php echo (string)$row1[0] . ":" . (float)$local_n ?><br>
+				<input type="radio" name="win" value=  "2" ?> <?php echo (string)$row2[0] . ":" . (float)$empate_n ?><br>
+				<input type="radio" name="win" value= "3" ?> <?php echo (string)$row3[0] . ":" . (float)$visitante_n ?><br>
+
+			</div><br>			
+
+			<div id="cantidad">
+				Cantidad a apostar: <input type="number" name="number_control" min="0" max="100" value="0" /><br/>
+			</div>
+			<input type="hidden" name="id" value= "<?php echo $_GET['id'] ?>" >	 
+			<input type="hidden" name="categ" value= "<?php echo $_GET['categ'] ?>" >	 			
+			<input type = "submit" id="carrito" value="" name="submit" />
+			<?php
+
+				if(isset($_GET['submit'])){
+
+					if(isset($_COOKIE["userid"])){
+						$customerid = (int)$_COOKIE["userid"];
+					}
+					else
+						$customerid = 0;
+
+					$bet = $_GET['number_control'];
+
+
+					if(!isset($_SESSION["carrito"])){
+
+						$carrito = new Carrito();
+						
+						if($_GET['win'] == "1"){
+							$option_id = $row1[2];
+							$optiondesc = (string)$row1[0]; 
+							$ratio = $row1[1];
+							$outcome = $row1[1] * (int)$bet;
+
+						}elseif($_GET['win'] == "2"){
+							$option_id = $row2[2];
+							$optiondesc = (string)$row2[0]; 
+							$ratio = $row2[1];
+							$outcome = $row2[1] * (int)$bet;
+
+						}else{
+							$option_id = $row3[2];
+							$optiondesc = (string)$row3[0]; 
+							$ratio = $row3[1];
+							$outcome = $row3[1] * (int)$bet;
+
+						}
+						$apuesta = new Apuesta();
+						$apuesta->setApuesta($customerid, $option_id, $bet, $ratio, $outcome, $id, $optiondesc, $betdesc);
+						$carrito->addCarrito($apuesta);
+						$_SESSION["carrito"] = $carrito;
+						?> <meta http-equiv="refresh" content="0;index.php" /> <?php
+					}
+					else{
+						if($_GET['win'] == "1"){
+							$option_id = $row1[2];
+							$optiondesc = (string)$row1[0]; 
+							$ratio = $row1[1];
+							$outcome = $row1[1] * (int)$bet;
+
+						}elseif($_GET['win'] == "2"){
+							$option_id = $row2[2];
+							$optiondesc = (string)$row2[0]; 
+							$ratio = $row2[1];
+							$outcome = $row2[1] * (int)$bet;
+
+						}else{
+							$option_id = $row3[2];
+							$optiondesc = (string)$row3[0]; 
+							$ratio = $row3[1];
+							$outcome = $row3[1] * (int)$bet;
+
+						}
+						$apuesta = new Apuesta();
+						$apuesta->setApuesta($customerid, $option_id, $bet, $ratio, $outcome, $id, $optiondesc, $betdesc);
+						$_SESSION["carrito"]->addCarrito($apuesta);
+						?> <meta http-equiv="refresh" content="0;index.php" /> <?php
+						
+					}
+
+				}
+			?>
+			</form>
+
+			</div>	
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
